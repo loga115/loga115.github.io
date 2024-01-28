@@ -15,10 +15,10 @@
         }
         
         .header {
-            background-image: url('banner.jpg');
+            background-image: url('banner.png');
             background-size: cover;
             background-position: center;
-            height: 300px;
+            height: 1000px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -26,6 +26,27 @@
             text-align: center;
             font-family: 'Roboto Mono', monospace;
             color: white;
+        }
+        
+        .navbar {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            text-align: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1;
+        }
+        
+        .navbar a {
+            color: white;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        
+        .navbar a:hover {
+            text-decoration: underline;
         }
         
         .footer {
@@ -36,6 +57,7 @@
             bottom: 0;
             left: 0;
             width: 100%;
+            color:white;
         }
         
         .footer a {
@@ -77,20 +99,57 @@
         
         .credentials li {
             margin-bottom: 15px;
+            font-size:150%;
+            font-family:'Roboto Mono', monospace;
+        }
+
+        .credentials dt {
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .credentials dl {
+            margin-left: 0;
+            padding-left: 0;
+            padding-bottom: 50px;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1 style="font-size: 200%;">Hello, I'm Logamithran</h1>
+    <div class="navbar">
+        <a href="#objective">Objective</a>
+        <a href="#skills">Skills</a>
+        <a href="#credentials">Credentials</a>
+        
+        <a href="#education">Education</a>
+        
+        
     </div>
-    <div class="credentials">
-        <p style="font-size: 150%;">Student of Engineering</p>
+    <div class="header">
+        <h1 style="font-size: 200%;">Hello, I'm Logamithran</h1><br><h2 style="font-size: 150%">Student of Engineering at VIT</h2>
+    </div>
+    <div class="credentials" id="main">
+        <div id = "objective">
+        <br><br><br><br>
         <h2><bold>Objective:</h2></bold>
-        <p>As a robotics engineering student, I am passionate about leveraging cutting-edge technology and movement to contribute to the field of computer applications and tech. Through hands-on experience and theoretical knowledge in robotics, I am poised to push the boundaries of what machines can achieve. My dream is to bring my skills and enthusiasm to a dynamic role at a pioneering company like Boston Dynamics, where I can contribute to the forefront of technological innovation.</p>
-        <div class="flex flex-col">
+
+        <p style="font-size: 18px; font-family: 'Roboto Mono', monospace; font-size:150%">
+            I'm Logamithran, a 19-year-old student from the Vellore Institute of Technology, driven by a profound passion for automation since my teenage years. My journey into robotics and technology at VIT has provided me with a solid foundation, combining theoretical knowledge with hands-on experience. What sets my aspirations apart is my keen interest in the intersection of technology and defense, aiming to contribute to groundbreaking research that advances automation in defense systems.
+            <br><br>
+            My fascination with automation began as a teenager, sparking a curiosity that led me to enroll at VIT. The academic environment here has equipped me with the skills necessary to navigate the intricate landscape of robotics. Beyond textbooks, I actively engage in extracurricular projects to gain practical experience and stay at the forefront of technological advancements. My coursework encompasses robotics, artificial intelligence, and automation, carefully chosen to align with the technological landscape navigated by companies like Boston Dynamics.
+            <br><br>
+            My ultimate goal is to contribute to the defense sector by leveraging advancements in automation technology. I believe that these innovations can play a transformative role in enhancing global security. Boston Dynamics stands as the pinnacle of technological innovation, representing the place where I envision making a significant impact. It's not just about the prestige associated with the company but the platform it provides to contribute meaningfully to the evolution of robotics.
+            <br><br>
+            With each lecture, project, and research endeavor, I am not just working towards graduation but striding towards my dream job. I actively seek mentorship and networking opportunities, understanding the value of continuous learning in this dynamic field. Resilience and adaptability are paramount as I navigate the rapid advancements and evolving paradigms in robotics.
+            <br><br>
+            Looking ahead, my vision extends beyond personal achievement to the broader impact I can have on society. I see a future where automation not only enhances defense capabilities but also addresses pressing global challenges. My dream is not just about personal success but about leveraging technology to contribute to positive societal change. As I embark on this journey armed with knowledge, determination, and a profound sense of purpose, I am poised to shape the future of automation, with Boston Dynamics as the beacon guiding my path.</p>
+            <br><br>
+
+        </div>
+        <div class="flex flex-col" id="credentials" style="height: 50vh;">
+            <br><br><br><br>
             <h2><bold>Credentials:</h2></bold>
-            <ul>
+            <ul style="font-size: 24px;">
                 <li>
                     <a href="https://github.com/loga115" target="_blank">
                         <img width="24px" height="24px" src="https://github.com/favicon.ico" alt="GitHub Favicon">
@@ -111,14 +170,22 @@
                 </li>
             </ul>
         </div>
-        <h2><bold>Education:</p> </bold></h2>
-        <ul>
-            <li>Student of Computer Science Engineering at Vellore Institute of Technology, Chennai (2026)</li>
-            <li>Student of Computer Science at Chettinad Vidyashram (2022)</li>
-        </ul>
-        
 
-        <div class="flex flex-col">
+        <div class="flex flex-col" id="education">
+            <br><br><br><br>
+            <h2><bold>Education:</p> </bold></h2>
+            <dl style="font-size: 150%;">
+                <dt>Student of Computer Science Engineering at Vellore Institute of Technology, Chennai (2026)</dt>
+                <dd>VIT Chennai has been an exceptional university for my pursuit of computer science education. The institution's robust curriculum, coupled with state-of-the-art facilities and a dynamic learning environment, has provided me with an enriching academic experience. The dedicated faculty at VIT Chennai brings a wealth of knowledge and industry expertise, fostering a culture of innovation and critical thinking. The computer science program is comprehensive, covering a diverse range of topics from fundamental algorithms to cutting-edge technologies. Hands-on projects, industry collaborations, and internships have been integral to my learning, allowing me to apply theoretical knowledge to real-world scenarios.
+                <br><br>
+                Beyond academics, VIT Chennai offers a vibrant campus life with numerous extracurricular activities and clubs, providing ample opportunities for personal and professional development. The university's commitment to fostering a global perspective is evident through international collaborations and exposure to diverse cultures. As a student at VIT Chennai, I have not only honed my technical skills but also developed soft skills, leadership qualities, and a global outlook that will undoubtedly contribute to my success in the field of computer science. VIT Chennai has been a nurturing and transformative academic home, equipping me with the tools to thrive in the ever-evolving landscape of computer science.</dd>
+                
+                <dt>Student of Computer Science at Chettinad Vidyashram (2022)</dt>
+                <dd>I completed my entire pre-kindergarten to 12th-grade education at Chettinad Vidyashram, culminating in my graduation in 2022. This educational journey provided me with a holistic foundation that extends beyond academic excellence. The school's rigorous curriculum and emphasis on extracurricular activities cultivated not only my intellectual capabilities but also my leadership, teamwork, and communication skills. Chettinad Vidyashram fostered an environment that encouraged curiosity and a love for learning, shaping not just my academic prowess but also instilling in me a passion for exploring diverse fields. As a graduate from this esteemed institution, I carry forward the values and lessons imbibed over the years, complementing my academic pursuits with a well-rounded and holistic approach to education.</dd>
+            </dl>
+        </div>
+
+        <div class="flex flex-col" id = "skills">
         <h2><bold>Skills:</h2></bold>
         <ul>
             <li>Arduino enthusiast</li>
@@ -129,10 +196,20 @@
             <li>Video Editing</li>
         </ul>
         </div>
+        <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
     </div>
     <div class="footer">
         &copy 2023 by Logamithran M R | 
         <a href="#top" class="back-to-top">Back to Top</a>
     </div>
+    <script>
+        const backToTopButton = document.querySelector('.back-to-top');
+        backToTopButton.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+    </script>
 </body>
 </html>
