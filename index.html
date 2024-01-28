@@ -14,6 +14,49 @@
             background-size: cover;
         }
         
+        .header {
+            background-image: url('banner.jpg');
+            background-size: cover;
+            background-position: center;
+            height: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+            font-family: 'Roboto Mono', monospace;
+            color: white;
+        }
+        
+        .footer {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            text-align: center;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+        }
+        
+        .footer a {
+            color: white;
+            text-decoration: none;
+        }
+        
+        .back-to-top {
+            display: inline-block;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .back-to-top:hover {
+            background-color: #555;
+        }
+        
         .credentials {
             padding: 50px;
             text-align: center;
@@ -38,8 +81,10 @@
     </style>
 </head>
 <body>
+    <div class="header">
+        <h1 style="font-size: 200%;">Hello, I'm Logamithran</h1>
+    </div>
     <div class="credentials">
-        <h1 style="font-size: 200%;">Logamithran</h1>
         <p style="font-size: 150%;">Student of Engineering</p>
         <h2><bold>Objective:</h2></bold>
         <p>As a robotics engineering student, I am passionate about leveraging cutting-edge technology and movement to contribute to the field of computer applications and tech. Through hands-on experience and theoretical knowledge in robotics, I am poised to push the boundaries of what machines can achieve. My dream is to bring my skills and enthusiasm to a dynamic role at a pioneering company like Boston Dynamics, where I can contribute to the forefront of technological innovation.</p>
@@ -84,6 +129,10 @@
             <li>Video Editing</li>
         </ul>
         </div>
+    </div>
+    <div class="footer">
+        &copy 2023 by Logamithran M R | 
+        <a href="#top" class="back-to-top">Back to Top</a>
     </div>
 </body>
 </html>
