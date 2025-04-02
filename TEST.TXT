@@ -1,0 +1,781 @@
+// LEX 
+%%
+{
+ #include <stdio.h>
+    #include <string.h>
+
+    int opflag = 0; op1=0; op2=0;
+    char operator;
+}
+%%
+[0-9]+  { if (opflag == 0) { op1 = atoi(yytext); opflag = 1; } else { op2 = atoi(yytext); opflag = 0; } }
+[+-/*] { operator = yytext[0]; }
+= { switch(operator) {
+    case '+': printf("%d\n", op1, op2, op1 + op2); break;
+    case '-': printf("%d - %d = %d\n", op1, op2, op1 - op2); break;
+    case '*': printf("%d * %d = %d\n", op1, op2, op1 * op2); break;
+    case '/': if (op2 != 0) printf("%d / %d = %f\n", op1, op2, (float)op1 / (float)op2); else printf("Division by zero error\n"); break;
+    default: printf("Unknown operator\n");
+}  
+}
+.|\n { /* Ignore newlines */ }
+[ \t]  { /* Ignore whitespace */ }
+%%
+int yywrap(void) { return 1; }
+int main(int argc, char **argv) {
+    yylex();
+    return 0;
+}
+
+// LR AND LF 
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_NAME 50
+#define MAX_RULES 100
+#define MAX_RULE_LENGTH 100
+#define MAX_NON_TERMINALS 50
+#define MAX_INPUT_LENGTH 200
+#define EPSILON "ep"
+
+// Structure to represent a non-terminal and its production rules
+struct NonTerminal {
+    char name[MAX_NAME];
+    char rules[MAX_RULES][MAX_RULE_LENGTH];
+    int rulesCount;
+};
+
+// Structure to represent the grammar
+struct Grammar {
+    struct NonTerminal nonTerminals[MAX_NON_TERMINALS];
+    int nonTerminalsCount;
+};
+
+void NT(struct NonTerminal* nt, const char* name);
+void addRule(struct NonTerminal* nt, const char* rule);
+void setRules(struct NonTerminal* nt, char rules[][MAX_RULE_LENGTH], int count);
+void printRule(struct NonTerminal* nt);
+void addGrammarRule(struct Grammar* grammar, const char* rule);
+void solveNonImmediateLR(struct NonTerminal* A, struct NonTerminal* B);
+void solveImmediateLR(struct Grammar* grammar, int index);
+void applyAlgorithm(struct Grammar* grammar);
+void printGrammar(struct Grammar* grammar);
+void inputGrammar(struct Grammar* grammar);
+int startsWithNonTerminal(const char* rule, const char* nonTerminal);
+void getRuleSuffix(char* dest, const char* rule, const char* nonTerminal);
+
+// Initialize a non-terminal
+void NT(struct NonTerminal* nt, const char* name) {
+    strcpy(nt->name, name);
+    nt->rulesCount = 0;
+}
+
+// Add a rule to a non-terminal
+void addRule(struct NonTerminal* nt, const char* rule) {
+    if (nt->rulesCount < MAX_RULES) {
+        strcpy(nt->rules[nt->rulesCount], rule);
+        nt->rulesCount++;
+    }
+}
+
+// Set all rules for a non-terminal
+void setRules(struct NonTerminal* nt, char rules[][MAX_RULE_LENGTH], int count) {
+    nt->rulesCount = 0;
+    for (int i = 0; i < count; i++) {
+        strcpy(nt->rules[nt->rulesCount], rules[i]);
+        nt->rulesCount++;
+    }
+}
+
+// Print a non-terminal's rules
+void printRule(struct NonTerminal* nt) {
+    printf("%s ->", nt->name);
+    for (int i = 0; i < nt->rulesCount; i++) {
+        printf(" %s", nt->rules[i]);
+        if (i < nt->rulesCount - 1) {
+            printf(" |");
+        }
+    }
+    printf("\n");
+}
+
+// Parse and add a rule to the grammar
+void addGrammarRule(struct Grammar* grammar, const char* rule) {
+    char buffer[MAX_RULE_LENGTH];
+    char* token;
+    
+    strcpy(buffer, rule);
+    token = strtok(buffer, " ->");
+    
+    // Initialize new non-terminal
+    NT(&grammar->nonTerminals[grammar->nonTerminalsCount], token);
+    
+    // Parse rules
+    token = strtok(NULL, "|");
+    while (token != NULL) {
+        // Remove leading and trailing spaces
+        while (*token == ' ') token++;
+        char* end = token + strlen(token) - 1;
+        while (end > token && *end == ' ') end--;
+        *(end + 1) = '\0';
+        
+        addRule(&grammar->nonTerminals[grammar->nonTerminalsCount], token);
+        token = strtok(NULL, "|");
+    }
+    
+    grammar->nonTerminalsCount++;
+}
+
+// Input grammar from user
+void inputGrammar(struct Grammar* grammar) {
+    int numRules;
+    char inputLine[MAX_INPUT_LENGTH];
+    
+    printf("Enter the number of rules: ");
+    scanf("%d", &numRules);
+    getchar(); // Consume newline
+    
+    printf("\nEnter the production rules in format 'A -> alpha | beta | gamma'\n");
+    printf("Example: S -> Sa | Sb | c | d\n");
+    printf("Use 'ep' for epsilon\n\n");
+    
+    for (int i = 0; i < numRules; i++) {
+        printf("Enter rule %d: ", i + 1);
+        fgets(inputLine, MAX_INPUT_LENGTH, stdin);
+        inputLine[strcspn(inputLine, "\n")] = 0; // Remove newline
+        addGrammarRule(grammar, inputLine);
+    }
+}
+
+// Check if a rule starts with a non-terminal
+int startsWithNonTerminal(const char* rule, const char* nonTerminal) {
+    return strncmp(rule, nonTerminal, strlen(nonTerminal)) == 0;
+}
+
+// Get suffix of rule after non-terminal
+void getRuleSuffix(char* dest, const char* rule, const char* nonTerminal) {
+    int ntLen = strlen(nonTerminal);
+    strcpy(dest, rule + ntLen);
+    if (strlen(dest) == 0) {
+        strcpy(dest, EPSILON);
+    }
+}
+
+// Solve non-immediate left recursion
+void solveNonImmediateLR(struct NonTerminal* A, struct NonTerminal* B) {
+    char newRules[MAX_RULES][MAX_RULE_LENGTH];
+    int newRulesCount = 0;
+
+    // For each rule in A
+    for (int i = 0; i < A->rulesCount; i++) {
+        if (startsWithNonTerminal(A->rules[i], B->name)) {
+            // Replace B with each of its rules
+            char suffix[MAX_RULE_LENGTH];
+            getRuleSuffix(suffix, A->rules[i], B->name);
+            
+            for (int j = 0; j < B->rulesCount; j++) {
+                char newRule[MAX_RULE_LENGTH];
+                if (strcmp(B->rules[j], EPSILON) == 0) {
+                    strcpy(newRule, suffix);
+                } else {
+                    sprintf(newRule, "%s%s", B->rules[j], suffix);
+                }
+                strcpy(newRules[newRulesCount++], newRule);
+            }
+        } else {
+            strcpy(newRules[newRulesCount++], A->rules[i]);
+        }
+    }
+    
+    setRules(A, newRules, newRulesCount);
+}
+
+// Solve immediate left recursion
+void solveImmediateLR(struct Grammar* grammar, int index) {
+    struct NonTerminal* A = &grammar->nonTerminals[index];
+    char alpha[MAX_RULES][MAX_RULE_LENGTH];
+    char beta[MAX_RULES][MAX_RULE_LENGTH];
+    int alphaCount = 0, betaCount = 0;
+    
+    // Separate rules into alpha (recursive) and beta (non-recursive)
+    for (int i = 0; i < A->rulesCount; i++) {
+        if (startsWithNonTerminal(A->rules[i], A->name)) {
+            getRuleSuffix(alpha[alphaCount++], A->rules[i], A->name);
+        } else {
+            strcpy(beta[betaCount++], A->rules[i]);
+        }
+    }
+    
+    // If there is left recursion
+    if (alphaCount > 0) {
+        // Create new non-terminal A'
+        char newName[MAX_NAME];
+        sprintf(newName, "%s'", A->name);
+        
+        // Create rules for original non-terminal
+        A->rulesCount = 0;
+        for (int i = 0; i < betaCount; i++) {
+            if (strcmp(beta[i], EPSILON) == 0) {
+                sprintf(A->rules[A->rulesCount++], "%s", newName);
+            } else {
+                sprintf(A->rules[A->rulesCount++], "%s%s", beta[i], newName);
+            }
+        }
+        
+        // Create new non-terminal with its rules
+        struct NonTerminal* newNT = &grammar->nonTerminals[grammar->nonTerminalsCount];
+        NT(newNT, newName);
+        
+        // Add rules for A'
+        for (int i = 0; i < alphaCount; i++) {
+            sprintf(newNT->rules[newNT->rulesCount++], "%s%s", alpha[i], newName);
+        }
+        addRule(newNT, EPSILON);
+        
+        grammar->nonTerminalsCount++;
+    }
+}
+
+// Apply the left recursion elimination algorithm
+void applyAlgorithm(struct Grammar* grammar) {
+    for (int i = 0; i < grammar->nonTerminalsCount; i++) {
+        for (int j = 0; j < i; j++) {
+            solveNonImmediateLR(&grammar->nonTerminals[i], &grammar->nonTerminals[j]);
+        }
+        solveImmediateLR(grammar, i);
+    }
+}
+
+// Find the longest common prefix of two strings
+int longestCommonPrefix(const char* str1, const char* str2) {
+    int i = 0;
+    while (str1[i] && str2[i] && str1[i] == str2[i]) {
+        i++;
+    }
+    return i;
+}
+
+// Perform left factoring on a non-terminal
+void leftFactoring(struct NonTerminal* nt, struct Grammar* grammar) {
+    char newRules[MAX_RULES][MAX_RULE_LENGTH];
+    int newRulesCount = 0;
+    int i = 0;
+
+    while (i < nt->rulesCount) {
+        int prefixLength = 0;
+        int j = i + 1;
+
+        // Find the longest common prefix among the rules
+        while (j < nt->rulesCount) {
+            int currentPrefixLength = longestCommonPrefix(nt->rules[i], nt->rules[j]);
+            if (currentPrefixLength > prefixLength) {
+                prefixLength = currentPrefixLength;
+            }
+            j++;
+        }
+
+        if (prefixLength > 0) {
+            // Create a new non-terminal for the common prefix
+            char newName[MAX_NAME];
+            sprintf(newName, "%s'", nt->name);
+
+            struct NonTerminal* newNT = &grammar->nonTerminals[grammar->nonTerminalsCount];
+            NT(newNT, newName);
+
+            // Add the common prefix rule to the original non-terminal
+            char commonPrefix[MAX_RULE_LENGTH];
+            strncpy(commonPrefix, nt->rules[i], prefixLength);
+            commonPrefix[prefixLength] = '\0';
+            sprintf(newRules[newRulesCount++], "%s%s", commonPrefix, newName);
+
+            // Add the remaining parts of the rules to the new non-terminal
+            for (int k = i; k < nt->rulesCount; k++) {
+                if (strncmp(nt->rules[k], commonPrefix, prefixLength) == 0) {
+                    char suffix[MAX_RULE_LENGTH];
+                    strcpy(suffix, nt->rules[k] + prefixLength);
+                    if (strlen(suffix) == 0) {
+                        strcpy(suffix, EPSILON);
+                    }
+                    addRule(newNT, suffix);
+                } else {
+                    strcpy(newRules[newRulesCount++], nt->rules[k]);
+                }
+            }
+
+            grammar->nonTerminalsCount++;
+        } else {
+            strcpy(newRules[newRulesCount++], nt->rules[i]);
+        }
+
+        i++;
+    }
+
+    setRules(nt, newRules, newRulesCount);
+}
+
+// Apply the left factoring algorithm to the grammar
+void applyLeftFactoring(struct Grammar* grammar) {
+    for (int i = 0; i < grammar->nonTerminalsCount; i++) {
+        leftFactoring(&grammar->nonTerminals[i], grammar);
+    }
+}
+
+// Print the grammar
+void printGrammar(struct Grammar* grammar) {
+    for (int i = 0; i < grammar->nonTerminalsCount; i++) {
+        printRule(&grammar->nonTerminals[i]);
+    }
+}
+
+int main() {
+    struct Grammar grammar = {0};
+    
+    printf("Left Recursion Elimination and Left Factoring Program\n");
+    printf("=====================================================\n\n");
+    
+    inputGrammar(&grammar);
+    
+    printf("\nOriginal Grammar:\n");
+    printf("----------------\n");
+    printGrammar(&grammar);
+    
+    printf("\nAfter eliminating left recursion:\n");
+    printf("--------------------------------\n");
+    applyAlgorithm(&grammar);
+    printGrammar(&grammar);
+    
+    printf("\nAfter applying left factoring:\n");
+    printf("------------------------------\n");
+    applyLeftFactoring(&grammar);
+    printGrammar(&grammar);
+    
+    return 0;
+}
+
+//firstandfollow
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdbool.h>
+
+// Modified to accommodate all possible terminal symbols
+#define MAX_NON_TERMINALS 26
+#define MAX_TERMINALS 44      // Increased to accommodate all defined terminal indices (0-43)
+#define MAX_GRAMMAR_RULES 50
+#define MAX_RHS_LENGTH 20
+#define EPSILON '$'
+
+// Structure to represent a grammar rule
+typedef struct {
+    char lhs;                      // Left-hand side (non-terminal)
+    char rhs[MAX_RHS_LENGTH + 1];  // Right-hand side
+} Rule;
+
+// Structure to represent the grammar
+typedef struct {
+    Rule rules[MAX_GRAMMAR_RULES];
+    int numRules;
+    bool first[MAX_NON_TERMINALS][MAX_TERMINALS + 1];  // +1 for epsilon
+    bool follow[MAX_NON_TERMINALS][MAX_TERMINALS + 1]; // +1 for $
+    bool nullable[MAX_NON_TERMINALS];                  // Can derive epsilon
+} Grammar;
+
+// Initialize grammar data structures
+void initGrammar(Grammar *g) {
+    g->numRules = 0;
+    
+    // Initialize sets to false
+    for (int i = 0; i < MAX_NON_TERMINALS; i++) {
+        g->nullable[i] = false;
+        
+        for (int j = 0; j <= MAX_TERMINALS; j++) {
+            g->first[i][j] = false;
+            g->follow[i][j] = false;
+        }
+    }
+}
+
+// Add a grammar rule
+void addRule(Grammar *g, char lhs, const char *rhs) {
+    if (g->numRules < MAX_GRAMMAR_RULES) {
+        g->rules[g->numRules].lhs = lhs;
+        strcpy(g->rules[g->numRules].rhs, rhs);
+        g->numRules++;
+    } else {
+        printf("Error: Maximum grammar rules exceeded.\n");
+        exit(1);
+    }
+}
+
+// Check if a symbol is a non-terminal (A-Z)
+bool isNonTerminal(char symbol) {
+    return (symbol >= 'A' && symbol <= 'Z');
+}
+
+// Check if a symbol is a terminal (a-z or special symbols except '$')
+bool isTerminal(char symbol) {
+    return ((symbol >= 'a' && symbol <= 'z') || 
+            (symbol >= '0' && symbol <= '9') ||
+            (symbol == '+' || symbol == '-' || symbol == '*' || symbol == '/' ||
+             symbol == '(' || symbol == ')' || symbol == ';'));
+}
+
+// Get array index for a non-terminal (A=0, B=1, ...)
+int ntIndex(char nt) {
+    return nt - 'A';
+}
+
+// Terminal index handling
+int tIndex(char t) {
+    if (t == EPSILON) return MAX_TERMINALS; // Last index for epsilon
+    if (t >= 'a' && t <= 'z') return t - 'a';
+    if (t >= '0' && t <= '9') return t - '0' + 26; // Map digits after letters
+    
+    // Map common operators and symbols to specific indices
+    switch(t) {
+        case '+': return 36;
+        case '-': return 37;
+        case '*': return 38;
+        case '/': return 39;
+        case '(': return 40;
+        case ')': return 41;
+        case ';': return 42;
+        default: return 43; // Other symbols
+    }
+}
+
+// Compute nullable set
+void computeNullable(Grammar *g) {
+    bool changed = true;
+    
+    // Initially mark any rule with epsilon as nullable
+    for (int i = 0; i < g->numRules; i++) {
+        if (strcmp(g->rules[i].rhs, "$") == 0) {
+            g->nullable[ntIndex(g->rules[i].lhs)] = true;
+        }
+    }
+    
+    // Iterate until no more changes
+    while (changed) {
+        changed = false;
+        
+        for (int i = 0; i < g->numRules; i++) {
+            char lhs = g->rules[i].lhs;
+            char *rhs = g->rules[i].rhs;
+            int lhsIdx = ntIndex(lhs);
+            
+            if (g->nullable[lhsIdx]) continue; // Already nullable
+            
+            bool allNullable = true;
+            for (int j = 0; rhs[j] != '\0'; j++) {
+                if (isNonTerminal(rhs[j])) {
+                    if (!g->nullable[ntIndex(rhs[j])]) {
+                        allNullable = false;
+                        break;
+                    }
+                } else if (rhs[j] != EPSILON) {
+                    allNullable = false;
+                    break;
+                }
+            }
+            
+            if (allNullable) {
+                g->nullable[lhsIdx] = true;
+                changed = true;
+            }
+        }
+    }
+}
+
+// Add terminal t to the FIRST set of non-terminal nt
+bool addToFirst(Grammar *g, int nt, int t) {
+    if (!g->first[nt][t]) {
+        g->first[nt][t] = true;
+        return true;
+    }
+    return false;
+}
+
+// FIRST calculation
+void computeFirst(Grammar *g) {
+    bool changed = true;
+    
+    // Rule 1: If X is a terminal, FIRST(X) = {X}
+    // (Handled directly when computing FIRST for non-terminals)
+    
+    // Rule 2: If X -> $ is a production, add $ to FIRST(X)
+    for (int i = 0; i < g->numRules; i++) {
+        if (strcmp(g->rules[i].rhs, "$") == 0) {
+            int nt = ntIndex(g->rules[i].lhs);
+            addToFirst(g, nt, tIndex(EPSILON));
+        }
+    }
+    
+    // Rules 3 & 4: For each production X -> Y1 Y2 ... Yn
+    while (changed) {
+        changed = false;
+        
+        for (int i = 0; i < g->numRules; i++) {
+            int lhsIdx = ntIndex(g->rules[i].lhs);
+            char *rhs = g->rules[i].rhs;
+            int j = 0;
+            bool canContinue = true;
+            
+            while (rhs[j] != '\0' && canContinue) {
+                canContinue = false;
+                
+                if (isTerminal(rhs[j])) {
+                    // Add terminal to FIRST(LHS)
+                    if (addToFirst(g, lhsIdx, tIndex(rhs[j]))) {
+                        changed = true;
+                    }
+                    break;
+                } else if (isNonTerminal(rhs[j])) {
+                    int ntRhs = ntIndex(rhs[j]);
+                    
+                    // Add all from FIRST(Y) to FIRST(X), except epsilon
+                    for (int k = 0; k <= MAX_TERMINALS; k++) {
+                        if (k != tIndex(EPSILON) && g->first[ntRhs][k]) {
+                            if (addToFirst(g, lhsIdx, k)) {
+                                changed = true;
+                            }
+                        }
+                    }
+                    
+                    // If Y is nullable, continue to next symbol
+                    if (g->nullable[ntRhs]) {
+                        canContinue = true;
+                        j++;
+                    } else {
+                        break;  // Not nullable, so stop here
+                    }
+                } else {
+                    // Skip other symbols
+                    break;
+                }
+            }
+            
+            // If we processed all RHS symbols and they're all nullable, add epsilon
+            if (rhs[j] == '\0' && (j > 0 || strcmp(rhs, "") == 0)) {
+                if (addToFirst(g, lhsIdx, tIndex(EPSILON))) {
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+// Add terminal t to the FOLLOW set of non-terminal nt
+bool addToFollow(Grammar *g, int nt, int t) {
+    if (!g->follow[nt][t]) {
+        g->follow[nt][t] = true;
+        return true;
+    }
+    return false;
+}
+
+// FOLLOW calculation
+void computeFollow(Grammar *g) {
+    // Rule 1: Add $ to FOLLOW(Start)
+    // Assuming the first non-terminal in the first rule is the start symbol
+    if (g->numRules > 0) {
+        int startSymbol = ntIndex(g->rules[0].lhs);
+        g->follow[startSymbol][tIndex('$')] = true;
+    }
+    
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        
+        for (int i = 0; i < g->numRules; i++) {
+            char lhs = g->rules[i].lhs;
+            char *rhs = g->rules[i].rhs;
+            int rhsLen = strlen(rhs);
+            
+            // For each position in the RHS
+            for (int j = 0; j < rhsLen; j++) {
+                if (!isNonTerminal(rhs[j])) continue;
+                
+                int currNt = ntIndex(rhs[j]);
+                int k = j + 1;
+                bool allNullable = true;
+                
+                // Process the symbols after the current non-terminal
+                while (k < rhsLen && allNullable) {
+                    if (isTerminal(rhs[k])) {
+                        // Add terminal directly to FOLLOW(currNt)
+                        if (addToFollow(g, currNt, tIndex(rhs[k]))) {
+                            changed = true;
+                        }
+                        allNullable = false;
+                    } else if (isNonTerminal(rhs[k])) {
+                        // Add FIRST(next NT) - {$} to FOLLOW(current NT)
+                        int nextNt = ntIndex(rhs[k]);
+                        for (int t = 0; t <= MAX_TERMINALS; t++) {
+                            if (t != tIndex(EPSILON) && g->first[nextNt][t]) {
+                                if (addToFollow(g, currNt, t)) {
+                                    changed = true;
+                                }
+                            }
+                        }
+                        
+                        // If next NT is not nullable, stop checking
+                        if (!g->nullable[nextNt]) {
+                            allNullable = false;
+                        }
+                    }
+                    k++;
+                }
+                
+                // If we reached the end or all remaining symbols are nullable,
+                // add FOLLOW(LHS) to FOLLOW(currNt)
+                if (k >= rhsLen && allNullable) {
+                    int lhsIdx = ntIndex(lhs);
+                    for (int t = 0; t <= MAX_TERMINALS; t++) {
+                        if (g->follow[lhsIdx][t]) {
+                            if (addToFollow(g, currNt, t)) {
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Helper function to convert terminal index back to character
+char getTerminalChar(int index) {
+    if (index >= 0 && index < 26) {
+        return 'a' + index;
+    } else if (index >= 26 && index < 36) {
+        return '0' + (index - 26);
+    } else {
+        switch (index) {
+            case 36: return '+';
+            case 37: return '-';
+            case 38: return '*';
+            case 39: return '/';
+            case 40: return '(';
+            case 41: return ')';
+            case 42: return ';';
+            default: return '?'; // Unknown
+        }
+    }
+}
+
+// Improved output formatting
+void printSets(Grammar *g) {
+    printf("\nGrammar Rules:\n");
+    for (int i = 0; i < g->numRules; i++) {
+        printf("%c -> %s\n", g->rules[i].lhs, g->rules[i].rhs);
+    }
+    
+    printf("\nNullable Non-terminals: ");
+    bool hasNullable = false;
+    for (int i = 0; i < MAX_NON_TERMINALS; i++) {
+        if (g->nullable[i]) {
+            printf("%c ", 'A' + i);
+            hasNullable = true;
+        }
+    }
+    if (!hasNullable) {
+        printf("None");
+    }
+    printf("\n");
+
+    printf("\nFIRST Sets:\n");
+    for (int i = 0; i < MAX_NON_TERMINALS; i++) {
+        bool exists = false;
+        for (int j = 0; j <= MAX_TERMINALS; j++) {
+            if (g->first[i][j]) {
+                exists = true;
+                break;
+            }
+        }
+        
+        if (exists) {
+            printf("FIRST(%c) = { ", 'A' + i);
+            bool first = true;
+            for (int j = 0; j < MAX_TERMINALS; j++) {
+                if (g->first[i][j]) {
+                    printf("%s%c", first ? "" : ", ", getTerminalChar(j));
+                    first = false;
+                }
+            }
+            if (g->first[i][MAX_TERMINALS]) {
+                printf("%s$", first ? "" : ", ");
+            }
+            printf(" }\n");
+        }
+    }
+    
+    printf("\nFOLLOW Sets:\n");
+    for (int i = 0; i < MAX_NON_TERMINALS; i++) {
+        bool exists = false;
+        for (int j = 0; j <= MAX_TERMINALS; j++) {
+            if (g->follow[i][j]) {
+                exists = true;
+                break;
+            }
+        }
+        
+        if (exists) {
+            printf("FOLLOW(%c) = { ", 'A' + i);
+            bool first = true;
+            for (int j = 0; j < MAX_TERMINALS; j++) {
+                if (g->follow[i][j]) {
+                    printf("%s%c", first ? "" : ", ", getTerminalChar(j));
+                    first = false;
+                }
+            }
+            if (g->follow[i][MAX_TERMINALS]) {
+                printf("%s$", first ? "" : ", ");
+            }
+            printf(" }\n");
+        }
+    }
+}
+
+// Rewritten main function for clarity
+int main() {
+    Grammar g;
+    initGrammar(&g);
+
+    int numRules;
+    printf("Enter number of rules: ");
+    scanf("%d", &numRules);
+    getchar();
+
+    printf("Enter grammar rules in format 'A->XYZ' (use $ for epsilon):\n");
+    for (int i = 0; i < numRules; i++) {
+        char inputLine[100];
+        fgets(inputLine, sizeof(inputLine), stdin);
+
+        if (strlen(inputLine) >= 4 && inputLine[1] == '-' && inputLine[2] == '>') {
+            char lhs = inputLine[0];
+            char rhs[MAX_RHS_LENGTH + 1];
+            strcpy(rhs, inputLine + 3);
+
+            // Remove trailing newline
+            size_t len = strlen(rhs);
+            if (len > 0 && rhs[len - 1] == '\n') {
+                rhs[len - 1] = '\0';
+            }
+            addRule(&g, lhs, rhs);
+        } else {
+            printf("Invalid rule format. Use 'A->XYZ' format.\n");
+            i--;
+        }
+    }
+
+    computeNullable(&g);
+    computeFirst(&g);
+    computeFollow(&g);
+    printSets(&g);
+
+    return 0;
+}
