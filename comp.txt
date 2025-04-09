@@ -789,3 +789,97 @@ int main() {
 
     return 0;
 }
+
+// Shift-Reduce Parser
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+class ShiftReduceParser {
+    string grammar = "E->E+E | E->E*E | E->(E) | E->id";
+    
+    void reduce(string& stack) {
+        bool reduced;
+        do {
+            reduced = false;
+            size_t pos;
+            
+            if ((pos = stack.find("id")) != string::npos) {
+                stack.replace(pos, 2, "E");
+                print_step("REDUCE TO E");
+                reduced = true;
+                continue;
+            }
+            
+            if ((pos = stack.find("E+E")) != string::npos) {
+                stack.replace(pos, 3, "E");
+                print_step("REDUCE TO E");
+                reduced = true;
+                continue;
+            }
+            
+            if ((pos = stack.find("E*E")) != string::npos) {
+                stack.replace(pos, 3, "E");
+                print_step("REDUCE TO E");
+                reduced = true;
+                continue;
+            }
+            
+            if ((pos = stack.find("(E)")) != string::npos) {
+                stack.replace(pos, 3, "E");
+                print_step("REDUCE TO E");
+                reduced = true;
+                continue;
+            }
+        } while (reduced);
+    }
+
+    void print_step(const string& action) {
+        cout << "$" << stack << "\t$" << input << "\t" << action << endl;
+    }
+
+public:
+    string input;
+    string stack;
+
+    void parse() {
+        cout << "GRAMMAR: " << grammar << "\nEnter input: " << input << endl;
+        cout << "Stack\tInput\tAction" << endl;
+
+        size_t j = 0;
+        while (j < input.length()) {
+            if (input[j] == ' ') {
+                j++;
+                continue;
+            }
+
+            string action;
+            if (j+1 < input.length() && input.substr(j, 2) == "id") {
+                stack += "id";
+                action = "SHIFT->id";
+                input.replace(j, 2, "  ");
+                j += 2;
+            } else {
+                stack += input[j];
+                action = "SHIFT->" + string(1, input[j]);
+                input[j] = ' ';
+                j++;
+            }
+            
+            print_step(action);
+            reduce(stack);
+        }
+        
+        cout << "\nFinal result: ";
+        cout << (stack == "E" ? "Accepted" : "Rejected") << endl;
+    }
+};
+
+int main() {
+    ShiftReduceParser parser;
+    cout << "Enter input string: ";
+    getline(cin, parser.input);
+    parser.parse();
+    return 0;
+}
