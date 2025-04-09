@@ -1,0 +1,791 @@
+// Lexical Analyser using cpp and regex
+#include <iostream>
+#include <regex>
+#include <string>
+#include <unordered_map>
+
+void lexicalAnalyzer(const std::string& input) {
+    // Define token patterns
+    std::unordered_map<std::string, std::string> tokenPatterns = {
+        {"KEYWORD", "\\b(if|else|while|for|return)\\b"},
+        {"IDENTIFIER", "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"},
+        {"NUMBER", "\\b\\d+\\b"},
+        {"OPERATOR", "[+\\-*/=]"},
+        {"PUNCTUATION", "[;,.]"},
+        {"WHITESPACE", "\\s+"}
+    };
+
+    std::cout << "Tokens:\n";
+
+    std::string remainingInput = input;
+    while (!remainingInput.empty()) {
+        bool matched = false;
+
+        for (const auto& [tokenType, pattern] : tokenPatterns) {
+            std::regex regexPattern("^" + pattern);
+            std::smatch match;
+
+            if (std::regex_search(remainingInput, match, regexPattern)) {
+                if (tokenType != "WHITESPACE") { // Ignore whitespace tokens
+                    std::cout << "<" << tokenType << ", " << match.str() << ">\n";
+                }
+                remainingInput = remainingInput.substr(match.length());
+                matched = true;
+                break;
+            }
+        }
+
+        if (!matched) {
+            std::cerr << "Error: Unrecognized token at: " << remainingInput << "\n";
+            break;
+        }
+    }
+}
+
+int main() {
+    std::string input;
+    std::cout << "Enter code to analyze: ";
+    std::getline(std::cin, input);
+
+    lexicalAnalyzer(input);
+
+    return 0;
+}
+
+// LEX 
+%%
+{
+ #include <stdio.h>
+    #include <string.h>
+
+    int opflag = 0; op1=0; op2=0;
+    char operator;
+}
+%%
+[0-9]+  { if (opflag == 0) { op1 = atoi(yytext); opflag = 1; } else { op2 = atoi(yytext); opflag = 0; } }
+[+-/*] { operator = yytext[0]; }
+= { switch(operator) {
+    case '+': printf("%d\n", op1, op2, op1 + op2); break;
+    case '-': printf("%d - %d = %d\n", op1, op2, op1 - op2); break;
+    case '*': printf("%d * %d = %d\n", op1, op2, op1 * op2); break;
+    case '/': if (op2 != 0) printf("%d / %d = %f\n", op1, op2, (float)op1 / (float)op2); else printf("Division by zero error\n"); break;
+    default: printf("Unknown operator\n");
+}  
+}
+.|\n { /* Ignore newlines */ }
+[ \t]  { /* Ignore whitespace */ }
+%%
+int yywrap(void) { return 1; }
+int main(int argc, char **argv) {
+    yylex();
+    return 0;
+}
+
+// First n follow
+#include <iostream>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+class Grammar {
+public:
+    void addRule(char lhs, const string& rhs) {
+        string processedRhs = rhs;
+        if (rhs == "~") {
+            processedRhs = "";
+        }
+        rules.emplace_back(lhs, processedRhs);
+    }
+
+    void computeNullable() {
+        nullable.clear();
+        bool changed;
+        do {
+            changed = false;
+
+            // Check for direct epsilon productions
+            for (const auto& rule : rules) {
+                if (rule.rhs.empty()) {
+                    if (nullable.insert(rule.lhs).second) {
+                        changed = true;
+                    }
+                }
+            }
+
+            // Check for productions where all symbols are nullable
+            for (const auto& rule : rules) {
+                char lhs = rule.lhs;
+                if (nullable.count(lhs)) continue;
+
+                bool allNullable = true;
+                for (char c : rule.rhs) {
+                    if (isTerminal(c) || !nullable.count(c)) {
+                        allNullable = false;
+                        break;
+                    }
+                }
+
+                if (allNullable) {
+                    if (nullable.insert(lhs).second) {
+                        changed = true;
+                    }
+                }
+            }
+        } while (changed);
+    }
+
+    void computeFirst() {
+        first_set.clear();
+        bool changed;
+        do {
+            changed = false;
+            for (const auto& rule : rules) {
+                char lhs = rule.lhs;
+                unordered_set<char> firstOfRhs = computeFirstOfString(rule.rhs);
+                size_t oldSize = first_set[lhs].size();
+                first_set[lhs].insert(firstOfRhs.begin(), firstOfRhs.end());
+                if (first_set[lhs].size() > oldSize) {
+                    changed = true;
+                }
+            }
+        } while (changed);
+    }
+
+    void computeFollow() {
+        follow_set.clear();
+        if (rules.empty()) return;
+
+        char startSymbol = rules[0].lhs;
+        follow_set[startSymbol].insert('$');
+
+        bool changed;
+        do {
+            changed = false;
+            for (const auto& rule : rules) {
+                char A = rule.lhs;
+                const string& alpha = rule.rhs;
+
+                for (size_t i = 0; i < alpha.size(); ++i) {
+                    char B = alpha[i];
+                    if (!isNonTerminal(B)) continue;
+
+                    string beta = alpha.substr(i + 1);
+                    unordered_set<char> firstBeta = computeFirstOfString(beta);
+
+                    // Add first(beta) - epsilon to follow(B)
+                    auto& followB = follow_set[B];
+                    size_t oldSize = followB.size();
+                    for (char t : firstBeta) {
+                        if (t != '~') {
+                            followB.insert(t);
+                        }
+                    }
+                    if (followB.size() > oldSize) {
+                        changed = true;
+                    }
+
+                    // If beta can derive epsilon, add follow(A) to follow(B)
+                    if (firstBeta.count('~') || beta.empty()) {
+                        oldSize = followB.size();
+                        const auto& followA = follow_set[A];
+                        followB.insert(followA.begin(), followA.end());
+                        if (followB.size() > oldSize) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        } while (changed);
+    }
+
+    void printSets() const {
+        cout << "Nullable Non-terminals: ";
+        for (char nt : nullable) {
+            cout << nt << " ";
+        }
+        cout << "\n\n";
+
+        cout << "FIRST Sets:\n";
+        for (const auto& entry : first_set) {
+            char nt = entry.first;
+            const auto& first = entry.second;
+            cout << "FIRST(" << nt << ") = { ";
+            bool firstTerm = true;
+            for (char t : first) {
+                if (!firstTerm) {
+                    cout << ", ";
+                }
+                cout << (t == '~' ? "ε" : string(1, t));
+                firstTerm = false;
+            }
+            cout << " }\n";
+        }
+
+        cout << "\nFOLLOW Sets:\n";
+        for (const auto& entry : follow_set) {
+            char nt = entry.first;
+            const auto& follow = entry.second;
+            cout << "FOLLOW(" << nt << ") = { ";
+            bool firstTerm = true;
+            for (char t : follow) {
+                if (!firstTerm) {
+                    cout << ", ";
+                }
+                cout << (t == '$' ? "$" : string(1, t));
+                firstTerm = false;
+            }
+            cout << " }\n";
+        }
+    }
+
+private:
+    struct Rule {
+        char lhs;
+        string rhs;
+        Rule(char l, const string& r) : lhs(l), rhs(r) {}
+    };
+
+    vector<Rule> rules;
+    unordered_map<char, unordered_set<char>> first_set;
+    unordered_map<char, unordered_set<char>> follow_set;
+    unordered_set<char> nullable;
+
+    bool isTerminal(char symbol) const {
+        return (symbol >= 'a' && symbol <= 'z') ||
+               (symbol >= '0' && symbol <= '9') ||
+               symbol == '+' || symbol == '-' || symbol == '*' || symbol == '/' ||
+               symbol == '(' || symbol == ')' || symbol == ';';
+    }
+
+    bool isNonTerminal(char symbol) const {
+        return symbol >= 'A' && symbol <= 'Z';
+    }
+
+    unordered_set<char> computeFirstOfString(const string& str) const {
+        unordered_set<char> first;
+        bool canDeriveEpsilon = true;
+
+        for (char c : str) {
+            if (isTerminal(c)) {
+                first.insert(c);
+                canDeriveEpsilon = false;
+                break;
+            } else if (isNonTerminal(c)) {
+                auto it = first_set.find(c);
+                if (it != first_set.end()) {
+                    const auto& cFirst = it->second;
+                    for (char t : cFirst) {
+                        if (t != '~') {
+                            first.insert(t);
+                        }
+                    }
+                    if (!cFirst.count('~')) {
+                        canDeriveEpsilon = false;
+                        break;
+                    }
+                } else {
+                    // Non-terminal has no first set, assume no epsilon
+                    canDeriveEpsilon = false;
+                    break;
+                }
+            } else {
+                // Invalid character?
+                canDeriveEpsilon = false;
+                break;
+            }
+        }
+
+        if (canDeriveEpsilon) {
+            first.insert('~');
+        }
+
+        return first;
+    }
+};
+
+int main() {
+    Grammar grammar;
+    int numRules;
+
+    cout << "Enter number of rules: ";
+    cin >> numRules;
+    cin.ignore(); // Ignore newline
+
+    cout << "Enter grammar rules in format 'A->XYZ' (use ~ for epsilon):\n";
+    for (int i = 0; i < numRules; ++i) {
+        string line;
+        getline(cin, line);
+
+        size_t arrowPos = line.find("->");
+        if (arrowPos != string::npos && arrowPos > 0) {
+            char lhs = line[0];
+            string rhs = line.substr(arrowPos + 2);
+            grammar.addRule(lhs, rhs);
+        } else {
+            cout << "Invalid rule format. Skipping.\n";
+            --i;
+        }
+    }
+
+    grammar.computeNullable();
+    grammar.computeFirst();
+    grammar.computeFollow();
+    grammar.printSets();
+
+    return 0;
+}
+
+// intermediate code gen
+#include <iostream>
+#include <string>
+#include <stack>
+#include <vector>
+#include <cctype>
+using namespace std;
+
+int precedence(char op) {
+    if(op == '+' || op == '-') return 1;
+    if(op == '*' || op == '/') return 2;
+    return 0;
+}
+
+bool isOperator(char c) {
+    return (c == '+' || c == '-' || c == '*' || c == '/');
+}
+
+int main(){
+    string input;
+    getline(cin, input);
+    
+    string expr;
+    for (char c : input) {
+        if(c != ' ')
+            expr.push_back(c);
+    }
+    
+    size_t eqPos = expr.find('=');
+    if(eqPos == string::npos) {
+        cout << "Invalid assignment expression." << endl;
+        return 1;
+    }
+    string lhs = expr.substr(0, eqPos);
+    string rhs = expr.substr(eqPos + 1);
+    
+    stack<char> opStack;
+    vector<string> postfix;
+    
+    for (size_t i = 0; i < rhs.size(); i++){
+        char c = rhs[i];
+        
+        if(isalpha(c) || isdigit(c)){
+            postfix.push_back(string(1, c));
+        }
+        else if(c == '('){
+            opStack.push(c);
+        }
+        else if(c == ')'){
+            while(!opStack.empty() && opStack.top() != '('){
+                postfix.push_back(string(1, opStack.top()));
+                opStack.pop();
+            }
+            if(!opStack.empty())
+                opStack.pop(); 
+        }
+        // If the character is an operator
+        else if(isOperator(c)){
+            while(!opStack.empty() && isOperator(opStack.top()) &&
+                  precedence(opStack.top()) >= precedence(c)){
+                postfix.push_back(string(1, opStack.top()));
+                opStack.pop();
+            }
+            opStack.push(c);
+        }
+    }
+    
+    // Pop any remaining operators in the stack
+    while(!opStack.empty()){
+        postfix.push_back(string(1, opStack.top()));
+        opStack.pop();
+    }
+    
+    stack<string> st;
+    int tempCount = 1;
+    vector<string> tac;
+    
+    for(auto token : postfix){
+        if(token.size() == 1 && isOperator(token[0])){
+            string right = st.top(); st.pop();
+            string left = st.top(); st.pop();
+            string temp = "t" + to_string(tempCount++);
+            tac.push_back(temp + "=" + left + token + right);
+            st.push(temp);
+        } else {
+            st.push(token);
+        }
+    }
+    
+    if(!st.empty()){
+        string finalTemp = st.top();
+        tac.push_back(lhs + "=" + finalTemp);
+    }
+    
+    for(auto line : tac)
+        cout << line << endl;
+    
+    return 0;
+}
+
+
+// leaders from 3 address code
+#include <iostream>
+#include <vector>
+#include <set>
+#include <sstream>
+#include <algorithm>
+
+using namespace std;
+
+struct Statement {
+    int line;
+    bool is_goto;
+    int target; // -1 if not a goto
+};
+
+vector<Statement> parse_3ac(const string& input) {
+    vector<Statement> code;
+    istringstream iss(input);
+    string line_str;
+    
+    while (getline(iss, line_str)) {
+        // Remove any leading/trailing whitespace
+        line_str.erase(remove_if(line_str.begin(), line_str.end(), ::isspace), line_str.end());
+        
+        size_t line_end = line_str.find(')');
+        if (line_end == string::npos) continue; // invalid line format
+        
+        int line_num = stoi(line_str.substr(1, line_end - 1));
+        string stmt = line_str.substr(line_end + 1);
+        
+        bool is_goto = false;
+        int target = -1;
+        
+        size_t goto_pos = stmt.find("goto");
+        if (goto_pos != string::npos) {
+            is_goto = true;
+            size_t target_start = stmt.find('(', goto_pos) + 1;
+            size_t target_end = stmt.find(')', target_start);
+            if (target_start != string::npos && target_end != string::npos) {
+                target = stoi(stmt.substr(target_start, target_end - target_start));
+            }
+        }
+        
+        code.push_back({line_num, is_goto, target});
+    }
+    
+    return code;
+}
+
+set<int> find_leaders(const vector<Statement>& code) {
+    set<int> leaders;
+    if (code.empty()) return leaders;
+    
+    // Rule 1: First statement is a leader
+    leaders.insert(code[0].line);
+    
+    // Rule 2: Targets of goto are leaders
+    set<int> targets;
+    for (const auto& stmt : code) {
+        if (stmt.is_goto && stmt.target != -1) {
+            targets.insert(stmt.target);
+        }
+    }
+    
+    // Rule 3: Statements immediately following any goto are leaders
+    set<int> next_after_goto;
+    for (size_t i = 0; i < code.size(); ++i) {
+        if (code[i].is_goto) {
+            if (i + 1 < code.size()) {
+                next_after_goto.insert(code[i + 1].line);
+            }
+        }
+    }
+    
+    // Combine all rules
+    leaders.insert(targets.begin(), targets.end());
+    leaders.insert(next_after_goto.begin(), next_after_goto.end());
+    
+    return leaders;
+}
+
+int main() {
+    string input = 
+        "(1) If (A < B) goto (3)\n"
+        "(2) goto (4)\n"
+        "(3) If (C < D) goto (6)\n"
+        "(4) t = 0\n"
+        "(5) goto (7)\n"
+        "(6) t = 1\n"
+        "(7)";
+    
+    vector<Statement> code = parse_3ac(input);
+    set<int> leaders = find_leaders(code);
+    
+    cout << "Leaders are: ";
+    for (int l : leaders) {
+        cout << l << " ";
+    }
+    cout << endl;
+    
+    return 0;
+}
+
+// identifier detection and matching with regex
+#include <iostream>
+#include <regex>
+#include <string>
+
+int main() {
+    std::string input;
+    std::regex identifierRegex("^[a-zA-Z_][a-zA-Z0-9_]*$");
+
+    std::cout << "Enter an identifier: ";
+    std::getline(std::cin, input);
+
+    if (std::regex_match(input, identifierRegex)) {
+        std::cout << "\"" << input << "\" is a valid identifier." << std::endl;
+    } else {
+        std::cout << "\"" << input << "\" is not a valid identifier." << std::endl;
+    }
+
+    return 0;
+}
+
+
+// left recursion and left factoring
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <algorithm>
+
+using namespace std;
+
+const string EPSILON = "~";
+
+class NonTerminal {
+    string name;
+    vector<string> rules;
+
+public:
+    NonTerminal(const string& name) : name(name) {}
+
+    void addRule(const string& rule) {
+        if (!rule.empty()) rules.push_back(rule);
+    }
+
+    void setRules(const vector<string>& newRules) {
+        rules = newRules;
+    }
+
+    const vector<string>& getRules() const { return rules; }
+    const string& getName() const { return name; }
+
+    void print() const {
+        cout << name << " -> ";
+        for (size_t i = 0; i < rules.size(); ++i) {
+            if (i > 0) cout << " | ";
+            cout << rules[i];
+        }
+        cout << endl;
+    }
+};
+
+class Grammar {
+    vector<NonTerminal> nonTerminals;
+
+    int findNT(const string& name) const {
+        for (size_t i = 0; i < nonTerminals.size(); ++i)
+            if (nonTerminals[i].getName() == name) return i;
+        return -1;
+    }
+
+    void replaceRules(NonTerminal& A, const NonTerminal& B) {
+        vector<string> newRules;
+        for (const string& rule : A.getRules()) {
+            if (rule.substr(0, B.getName().size()) == B.getName()) {
+                string suffix = rule.substr(B.getName().size());
+                if (suffix.empty()) suffix = EPSILON;
+                
+                for (const string& bRule : B.getRules()) {
+                    string combined = (bRule == EPSILON) ? suffix : bRule + suffix;
+                    if (combined.empty()) combined = EPSILON;
+                    newRules.push_back(combined);
+                }
+            } else {
+                newRules.push_back(rule);
+            }
+        }
+        A.setRules(newRules);
+    }
+
+    void resolveImmediateLR(NonTerminal& A) {
+        vector<string> alphas, betas;
+        string AName = A.getName();
+        
+        for (const string& rule : A.getRules()) {
+            if (rule.substr(0, AName.size()) == AName)
+                alphas.push_back(rule.substr(AName.size()));
+            else
+                betas.push_back(rule);
+        }
+
+        if (alphas.empty()) return;
+
+        NonTerminal newNT(AName + "'");
+        vector<string> newARules;
+        
+        for (string beta : betas) {
+            newARules.push_back(beta == EPSILON ? newNT.getName() : beta + newNT.getName());
+        }
+        
+        A.setRules(newARules);
+
+        for (string alpha : alphas) {
+            newNT.addRule(alpha + newNT.getName());
+        }
+        newNT.addRule(EPSILON);
+        
+        nonTerminals.push_back(newNT);
+    }
+
+    void factorGroup(NonTerminal& nt, const vector<string>& group, size_t prefixLen) {
+        string common = group[0].substr(0, prefixLen);
+        NonTerminal newNT(nt.getName() + "'");
+        
+        for (const string& rule : group) {
+            string suffix = rule.substr(prefixLen);
+            newNT.addRule(suffix.empty() ? EPSILON : suffix);
+        }
+        
+        nt.addRule(common + newNT.getName());
+        nonTerminals.push_back(newNT);
+    }
+
+public:
+    void addRule(const string& ruleStr) {
+        istringstream iss(ruleStr);
+        string lhs, arrow, rhs;
+        iss >> lhs >> arrow;
+        
+        getline(iss, rhs);
+        rhs.erase(remove_if(rhs.begin(), rhs.end(), ::isspace), rhs.end());
+
+        int ntIndex = findNT(lhs);
+        if (ntIndex == -1) {
+            nonTerminals.emplace_back(lhs);
+            ntIndex = nonTerminals.size() - 1;
+        }
+
+        stringstream rhsStream(rhs);
+        string production;
+        while (getline(rhsStream, production, '|')) {
+            nonTerminals[ntIndex].addRule(production);
+        }
+    }
+
+    void eliminateLeftRecursion() {
+        for (size_t i = 0; i < nonTerminals.size(); ++i) {
+            for (size_t j = 0; j < i; ++j) {
+                replaceRules(nonTerminals[i], nonTerminals[j]);
+            }
+            resolveImmediateLR(nonTerminals[i]);
+        }
+    }
+
+    void leftFactor() {
+        for (NonTerminal& nt : nonTerminals) {
+            vector<string> rules = nt.getRules();
+            nt.setRules({});
+
+            while (!rules.empty()) {
+                size_t maxLen = 0;
+                vector<string> maxGroup;
+
+                for (size_t i = 0; i < rules.size(); ++i) {
+                    vector<string> currentGroup = {rules[i]};
+                    size_t currentMax = string::npos;
+
+                    for (size_t j = i+1; j < rules.size(); ++j) {
+                        size_t k = 0;
+                        while (k < rules[i].size() && k < rules[j].size() 
+                               && rules[i][k] == rules[j][k]) ++k;
+                        
+                        if (k > 0 && (currentMax == string::npos || k < currentMax)) {
+                            currentMax = k;
+                        }
+                    }
+
+                    if (currentMax != string::npos && currentMax > maxLen) {
+                        maxLen = currentMax;
+                        maxGroup.clear();
+                        maxGroup.push_back(rules[i]);
+                        for (size_t j = i+1; j < rules.size(); ++j) {
+                            if (rules[j].substr(0, currentMax) == rules[i].substr(0, currentMax)) {
+                                maxGroup.push_back(rules[j]);
+                            }
+                        }
+                    }
+                }
+
+                if (maxLen > 0 && !maxGroup.empty()) {
+                    factorGroup(nt, maxGroup, maxLen);
+                    rules.erase(remove_if(rules.begin(), rules.end(), [&](const string& r) {
+                        return find(maxGroup.begin(), maxGroup.end(), r) != maxGroup.end();
+                    }), rules.end());
+                } else {
+                    nt.addRule(rules[0]);
+                    rules.erase(rules.begin());
+                }
+            }
+        }
+    }
+
+    void print() const {
+        for (const NonTerminal& nt : nonTerminals) {
+            nt.print();
+        }
+    }
+};
+
+int main() {
+    Grammar grammar;
+    int ruleCount;
+    
+    cout << "Enter number of productions: ";
+    cin >> ruleCount;
+    cin.ignore();
+
+    for (int i = 0; i < ruleCount; ++i) {
+        string production;
+        cout << "Enter production " << i+1 << ": ";
+        getline(cin, production);
+        grammar.addRule(production);
+    }
+
+    cout << "\nOriginal Grammar:\n";
+    grammar.print();
+
+    grammar.eliminateLeftRecursion();
+    cout << "\nAfter Left Recursion Elimination:\n";
+    grammar.print();
+
+    grammar.leftFactor();
+    cout << "\nAfter Left Factoring:\n";
+    grammar.print();
+
+    return 0;
+}
